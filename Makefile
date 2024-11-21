@@ -1,42 +1,45 @@
-PINNED_TOOLCHAIN := $(shell cat rust-toolchain)
+PINNED_TOOLCHAIN := $(shell cat contracts/rust-toolchain)
 
 prepare:
-	rustup target add wasm32-unknown-unknown
+	rustup install ${PINNED_TOOLCHAIN} # Ensure the correct nightly is installed
+	rustup target add wasm32-unknown-unknown --toolchain ${PINNED_TOOLCHAIN}
 	rustup component add clippy --toolchain ${PINNED_TOOLCHAIN}
 	rustup component add rustfmt --toolchain ${PINNED_TOOLCHAIN}
+	rustup component add rust-src --toolchain ${PINNED_TOOLCHAIN}
 
 .PHONY:	build-contract
 build-contract:
-	cargo build --release --target wasm32-unknown-unknown -p cep18
-	cargo build --release --target wasm32-unknown-unknown -p cep18-test-contract
-	wasm-strip target/wasm32-unknown-unknown/release/cep18.wasm
+	cd contracts && RUSTFLAGS="-C target-cpu=mvp" cargo build --release --target wasm32-unknown-unknown -Z build-std=std,panic_abort -p cowl-cep18
+	wasm-strip target/wasm32-unknown-unknown/release/cowl_cep18.wasm
+
+.PHONY:	build-all-contracts
+build-all-contracts: build-contract
+	cd contracts && RUSTFLAGS="-C target-cpu=mvp" cargo build --release --target wasm32-unknown-unknown -Z build-std=std,panic_abort -p cep18-test-contract
 	wasm-strip target/wasm32-unknown-unknown/release/cep18_test_contract.wasm
 
-setup-test: build-contract
+setup-test: build-all-contracts
 	mkdir -p tests/wasm
-	cp ./target/wasm32-unknown-unknown/release/cep18.wasm tests/wasm
+	cp ./target/wasm32-unknown-unknown/release/cowl_cep18.wasm tests/wasm
 	cp ./target/wasm32-unknown-unknown/release/cep18_test_contract.wasm tests/wasm
 
 test: setup-test
 	cd tests && cargo test
 
 clippy:
-	cd cep18 && cargo clippy --all-targets -- -D warnings
-	cd cep18-test-contract && cargo clippy --all-targets -- -D warnings
+	cd contracts && cargo clippy --bins --target wasm32-unknown-unknown -Z build-std=std,panic_abort -- -D warnings
+	cd contracts && cargo clippy --lib --target wasm32-unknown-unknown -Z build-std=std,panic_abort -- -D warnings
+	cd contracts && cargo clippy --lib --target wasm32-unknown-unknown -Z build-std=std,panic_abort --no-default-features -- -D warnings
 	cd tests && cargo clippy --all-targets -- -D warnings
 
 check-lint: clippy
-	cd cep18 && cargo fmt -- --check
-	cd cep18-test-contract && cargo fmt -- --check
-	cd tests && cargo fmt -- --check
+	cd contracts && cargo fmt -- --check
+	cd tests && cargo +$(PINNED_TOOLCHAIN) fmt -- --check
 
-lint: clippy
-	cd cep18 && cargo fmt
-	cd cep18-test-contract && cargo fmt
-	cd tests && cargo fmt
+format:
+	cd contracts && cargo fmt
+	cd tests && cargo +$(PINNED_TOOLCHAIN) fmt
 
 clean:
-	cd cep18 && cargo clean
-	cd cep18-test-contract && cargo clean
+	cd contracts && cargo clean
 	cd tests && cargo clean
 	rm -rf tests/wasm

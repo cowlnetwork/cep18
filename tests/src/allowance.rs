@@ -1,12 +1,12 @@
 use casper_engine_test_support::{ExecuteRequestBuilder, DEFAULT_ACCOUNT_ADDR};
 use casper_types::{runtime_args, ApiError, Key, RuntimeArgs, U256};
+use cowl_cep18::constants::{
+    ARG_AMOUNT, ARG_OWNER, ARG_RECIPIENT, ARG_SPENDER, ENTRY_POINT_APPROVE,
+    ENTRY_POINT_DECREASE_ALLOWANCE, ENTRY_POINT_INCREASE_ALLOWANCE, ENTRY_POINT_TRANSFER_FROM,
+};
 
 use crate::utility::{
-    constants::{
-        ACCOUNT_1_ADDR, ALLOWANCE_AMOUNT_1, ALLOWANCE_AMOUNT_2, ARG_AMOUNT, ARG_OWNER,
-        ARG_RECIPIENT, ARG_SPENDER, DECREASE_ALLOWANCE, ERROR_INSUFFICIENT_ALLOWANCE,
-        INCREASE_ALLOWANCE, METHOD_APPROVE, METHOD_TRANSFER_FROM,
-    },
+    constants::{ACCOUNT_USER_1, ALLOWANCE_AMOUNT_1, ALLOWANCE_AMOUNT_2},
     installer_request_builders::{
         cep18_check_allowance_of, make_cep18_approve_request, setup, test_approve_for, TestContext,
     },
@@ -53,12 +53,17 @@ fn should_approve_funds_contract_to_contract() {
 fn should_approve_funds_account_to_account() {
     let (mut builder, test_context) = setup();
 
+    let TestContext {
+        ref test_accounts, ..
+    } = test_context;
+    let account_user_1 = *test_accounts.get(&ACCOUNT_USER_1).unwrap();
+
     test_approve_for(
         &mut builder,
         &test_context,
         Key::Account(*DEFAULT_ACCOUNT_ADDR),
         Key::Account(*DEFAULT_ACCOUNT_ADDR),
-        Key::Account(*ACCOUNT_1_ADDR),
+        Key::Account(account_user_1),
     );
 }
 
@@ -76,14 +81,23 @@ fn should_approve_funds_account_to_contract() {
 
 #[test]
 fn should_not_transfer_from_without_enough_allowance() {
-    let (mut builder, TestContext { cep18_token, .. }) = setup();
+    let (
+        mut builder,
+        TestContext {
+            cep18_token,
+            ref test_accounts,
+            ..
+        },
+    ) = setup();
+
+    let account_user_1 = *test_accounts.get(&ACCOUNT_USER_1).unwrap();
 
     let allowance_amount_1 = U256::from(ALLOWANCE_AMOUNT_1);
     let transfer_from_amount_1 = allowance_amount_1 + U256::one();
 
     let sender = *DEFAULT_ACCOUNT_ADDR;
     let owner = sender;
-    let recipient = *ACCOUNT_1_ADDR;
+    let recipient = account_user_1;
 
     let cep18_approve_args = runtime_args! {
         ARG_OWNER => Key::Account(owner),
@@ -103,7 +117,7 @@ fn should_not_transfer_from_without_enough_allowance() {
     let approve_request_1 = ExecuteRequestBuilder::contract_call_by_hash(
         sender,
         cep18_token,
-        METHOD_APPROVE,
+        ENTRY_POINT_APPROVE,
         cep18_approve_args,
     )
     .build();
@@ -111,7 +125,7 @@ fn should_not_transfer_from_without_enough_allowance() {
     let transfer_from_request_1 = ExecuteRequestBuilder::contract_call_by_hash(
         sender,
         cep18_token,
-        METHOD_TRANSFER_FROM,
+        ENTRY_POINT_TRANSFER_FROM,
         cep18_transfer_from_args,
     )
     .build();
@@ -126,7 +140,7 @@ fn should_not_transfer_from_without_enough_allowance() {
 
     let error = builder.get_error().expect("should have error");
     assert!(
-        matches!(error, CoreError::Exec(ExecError::Revert(ApiError::User(user_error))) if user_error == ERROR_INSUFFICIENT_ALLOWANCE),
+        matches!(error, CoreError::Exec(ExecError::Revert(ApiError::User(user_error))) if user_error == cowl_cep18::error::Cep18Error::InsufficientAllowance as u16),
         "{:?}",
         error
     );
@@ -149,7 +163,7 @@ fn test_decrease_allowance() {
     let decrease_allowance_request = ExecuteRequestBuilder::contract_call_by_hash(
         sender.into_account().unwrap(),
         cep18_token,
-        DECREASE_ALLOWANCE,
+        ENTRY_POINT_DECREASE_ALLOWANCE,
         runtime_args! {
             ARG_SPENDER => spender,
             ARG_AMOUNT => allowance_amount_2,
@@ -159,7 +173,7 @@ fn test_decrease_allowance() {
     let increase_allowance_request = ExecuteRequestBuilder::contract_call_by_hash(
         sender.into_account().unwrap(),
         cep18_token,
-        INCREASE_ALLOWANCE,
+        ENTRY_POINT_INCREASE_ALLOWANCE,
         runtime_args! {
             ARG_SPENDER => spender,
             ARG_AMOUNT => allowance_amount_1,
