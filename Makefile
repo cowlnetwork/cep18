@@ -1,7 +1,8 @@
 PINNED_TOOLCHAIN := $(shell cat contracts/rust-toolchain)
 
 prepare:
-	rustup target add wasm32-unknown-unknown
+	rustup install ${PINNED_TOOLCHAIN} # Ensure the correct nightly is installed
+	rustup target add wasm32-unknown-unknown --toolchain ${PINNED_TOOLCHAIN}
 	rustup component add clippy --toolchain ${PINNED_TOOLCHAIN}
 	rustup component add rustfmt --toolchain ${PINNED_TOOLCHAIN}
 	rustup component add rust-src --toolchain ${PINNED_TOOLCHAIN}
