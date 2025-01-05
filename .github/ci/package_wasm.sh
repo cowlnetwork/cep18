@@ -4,7 +4,7 @@ set -e
 
 BUILD_ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." >/dev/null 2>&1 && pwd)"
 IGNORE='cep18_test_contract'
-WASM_FILE_PATH_ARRAY=($(cat "$BUILD_ROOT_DIR/Makefile" | grep 'wasm-strip' | awk -F' ' '{print $2}'))
+WASM_FILE_PATH_ARRAY=($(cat "$BUILD_ROOT_DIR/../Makefile" | grep 'wasm-strip' | awk -F' ' '{print $2}'))
 TAG=${GITHUB_REF_NAME:-local}
 TEMP_DIR="/tmp/ci_package_wasm_$TAG"
 TARBALL="cowl-cep18-wasm.tar.gz"
