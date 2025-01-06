@@ -17,12 +17,16 @@ build-all-contracts: build-contract
 	cd contracts && RUSTFLAGS="-C target-cpu=mvp" cargo build --release --target wasm32-unknown-unknown -Z build-std=std,panic_abort -p cep18-test-contract
 	wasm-strip target/wasm32-unknown-unknown/release/cep18_test_contract.wasm
 
-setup-test: build-all-contracts
+setup-test: build-all-contracts copy-wasm
+
+copy-wasm:
 	mkdir -p tests/wasm
 	cp ./target/wasm32-unknown-unknown/release/cowl_cep18.wasm tests/wasm
 	cp ./target/wasm32-unknown-unknown/release/cep18_test_contract.wasm tests/wasm
 
-test: setup-test
+test: setup-test test-dev
+
+test-dev:
 	cd tests && cargo test
 
 clippy:
