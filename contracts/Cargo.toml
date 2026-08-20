@@ -10,7 +10,7 @@ homepage = "https://github.com/casper-ecosystem"
 repository = "https://github.com/casper-ecosystem"
 
 [workspace.dependencies]
-casper-types = "4.0.2"
+casper-types = "6.1"
 
 [profile.release]
 codegen-units = 1

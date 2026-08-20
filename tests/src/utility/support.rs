@@ -1,29 +1,23 @@
 use std::fmt::Debug;
 
 use casper_engine_test_support::{
-    ExecuteRequestBuilder, WasmTestBuilder, DEFAULT_ACCOUNT_ADDR, DEFAULT_ACCOUNT_INITIAL_BALANCE,
+    LmdbWasmTestBuilder, TransferRequestBuilder, DEFAULT_ACCOUNT_INITIAL_BALANCE,
 };
 use casper_event_standard::EVENTS_DICT;
-use casper_execution_engine::{
-    core::{engine_state::Error as EngineStateError, execution},
-    storage::global_state::in_memory::InMemoryGlobalState,
-};
+use casper_execution_engine::{engine_state::Error as EngineStateError, execution::ExecError};
 use casper_types::{
     account::AccountHash,
     bytesrepr::{Bytes, FromBytes},
-    runtime_args,
-    system::{
-        handle_payment::{ARG_AMOUNT, ARG_TARGET},
-        mint::ARG_ID,
-    },
-    ApiError, CLTyped, Key, PublicKey, RuntimeArgs, SecretKey,
+    ApiError, CLTyped, Key, PublicKey, SecretKey,
 };
+
+type InMemoryWasmTestBuilder = LmdbWasmTestBuilder;
 
 pub fn assert_expected_error(actual_error: EngineStateError, error_code: u16, reason: &str) {
     let actual = format!("{actual_error:?}");
     let expected = format!(
         "{:?}",
-        EngineStateError::Exec(execution::Error::Revert(ApiError::User(error_code)))
+        EngineStateError::Exec(ExecError::Revert(ApiError::User(error_code)))
     );
 
     assert_eq!(
@@ -34,7 +28,7 @@ pub fn assert_expected_error(actual_error: EngineStateError, error_code: u16, re
 
 /* COWL */
 pub fn get_dictionary_value_from_key<T: CLTyped + FromBytes>(
-    builder: &WasmTestBuilder<InMemoryGlobalState>,
+    builder: &InMemoryWasmTestBuilder,
     contract_key: &Key,
     dictionary_name: &str,
     dictionary_key: &str,
@@ -61,7 +55,7 @@ pub fn get_dictionary_value_from_key<T: CLTyped + FromBytes>(
 }
 
 pub fn get_event<T: FromBytes + CLTyped + Debug>(
-    builder: &WasmTestBuilder<InMemoryGlobalState>,
+    builder: &InMemoryWasmTestBuilder,
     contract_key: &Key,
     index: u32,
 ) -> T {
@@ -76,7 +70,7 @@ pub fn get_event<T: FromBytes + CLTyped + Debug>(
 
 // Creates a dummy account and transfer funds to it
 pub fn create_funded_dummy_account(
-    builder: &mut WasmTestBuilder<InMemoryGlobalState>,
+    builder: &mut InMemoryWasmTestBuilder,
     account_string: Option<[u8; 32]>,
 ) -> AccountHash {
     let (_, account_public_key) = create_dummy_key_pair(account_string.unwrap_or([7u8; 32]));
@@ -92,15 +86,8 @@ pub fn create_dummy_key_pair(account_string: [u8; 32]) -> (SecretKey, PublicKey)
     (secret_key, public_key)
 }
 
-pub fn fund_account(builder: &mut WasmTestBuilder<InMemoryGlobalState>, account: AccountHash) {
-    let transfer = ExecuteRequestBuilder::transfer(
-        *DEFAULT_ACCOUNT_ADDR,
-        runtime_args! {
-            ARG_AMOUNT => DEFAULT_ACCOUNT_INITIAL_BALANCE / 10_u64,
-            ARG_TARGET => account,
-            ARG_ID => Option::<u64>::None,
-        },
-    )
-    .build();
-    builder.exec(transfer).expect_success().commit();
+pub fn fund_account(builder: &mut InMemoryWasmTestBuilder, account: AccountHash) {
+    let transfer =
+        TransferRequestBuilder::new(DEFAULT_ACCOUNT_INITIAL_BALANCE / 10_u64, account).build();
+    builder.transfer_and_commit(transfer);
 }

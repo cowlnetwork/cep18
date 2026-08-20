@@ -7,7 +7,7 @@ use cowl_cep18::constants::{
 use crate::utility::{
     constants::{TOKEN_DECIMALS, TOKEN_NAME, TOKEN_SYMBOL, TOKEN_TOTAL_SUPPLY},
     installer_request_builders::{
-        cep18_check_balance_of, invert_cep18_address, setup, TestContext,
+        cep18_check_balance_of, cep18_entity_addr, invert_cep18_address, setup, TestContext,
     },
 };
 
@@ -15,16 +15,16 @@ use crate::utility::{
 fn should_have_queryable_properties() {
     let (mut builder, TestContext { cep18_token, .. }) = setup();
 
-    let name: String = builder.get_value(cep18_token, ARG_NAME);
+    let name: String = builder.get_value(cep18_entity_addr(cep18_token), ARG_NAME);
     assert_eq!(name, TOKEN_NAME);
 
-    let symbol: String = builder.get_value(cep18_token, ARG_SYMBOL);
+    let symbol: String = builder.get_value(cep18_entity_addr(cep18_token), ARG_SYMBOL);
     assert_eq!(symbol, TOKEN_SYMBOL);
 
-    let decimals: u8 = builder.get_value(cep18_token, ARG_DECIMALS);
+    let decimals: u8 = builder.get_value(cep18_entity_addr(cep18_token), ARG_DECIMALS);
     assert_eq!(decimals, TOKEN_DECIMALS);
 
-    let total_supply: U256 = builder.get_value(cep18_token, ARG_TOTAL_SUPPLY);
+    let total_supply: U256 = builder.get_value(cep18_entity_addr(cep18_token), ARG_TOTAL_SUPPLY);
     assert_eq!(total_supply, U256::from(TOKEN_TOTAL_SUPPLY));
 
     let owner_key = Key::Account(*DEFAULT_ACCOUNT_ADDR);
@@ -53,10 +53,6 @@ fn should_not_store_balances_or_allowances_under_account_after_install() {
         .expect("should have account");
 
     let named_keys = account.named_keys();
-    assert!(!named_keys.contains_key(DICT_BALANCES), "{:?}", named_keys);
-    assert!(
-        !named_keys.contains_key(DICT_ALLOWANCES),
-        "{:?}",
-        named_keys
-    );
+    assert!(!named_keys.contains(DICT_BALANCES), "{:?}", named_keys);
+    assert!(!named_keys.contains(DICT_ALLOWANCES), "{:?}", named_keys);
 }

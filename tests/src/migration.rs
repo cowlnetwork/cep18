@@ -1,5 +1,5 @@
 use casper_engine_test_support::{ExecuteRequestBuilder, DEFAULT_ACCOUNT_ADDR};
-use casper_types::{runtime_args, Key, RuntimeArgs};
+use casper_types::{runtime_args, Key};
 use cowl_cep18::{
     constants::{ARG_NAME, ARG_UPGRADE_FLAG},
     events::Upgrade,

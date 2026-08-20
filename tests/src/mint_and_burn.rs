@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use casper_engine_test_support::{ExecuteRequestBuilder, DEFAULT_ACCOUNT_ADDR};
-use casper_types::{runtime_args, ApiError, Key, RuntimeArgs, U256};
+use casper_types::{runtime_args, ApiError, Key, U256};
 use cowl_cep18::constants::{
     ADMIN_LIST, ARG_AMOUNT, ARG_DECIMALS, ARG_ENABLE_MINT_BURN, ARG_NAME, ARG_OWNER, ARG_SYMBOL,
     ARG_TOTAL_SUPPLY, ENTRY_POINT_BURN, ENTRY_POINT_CHANGE_SECURITY, ENTRY_POINT_MINT, MINTER_LIST,
@@ -19,9 +19,7 @@ use crate::utility::{
     support::{create_dummy_key_pair, fund_account},
 };
 
-use casper_execution_engine::core::{
-    engine_state::Error as CoreError, execution::Error as ExecError,
-};
+use casper_execution_engine::{engine_state::Error as CoreError, execution::ExecError};
 
 #[test]
 fn test_mint_and_burn_tokens() {
@@ -51,7 +49,7 @@ fn test_mint_and_burn_tokens() {
 
     let mint_request = ExecuteRequestBuilder::contract_call_by_hash(
         *DEFAULT_ACCOUNT_ADDR,
-        cep18_token,
+        cep18_token.into(),
         ENTRY_POINT_MINT,
         runtime_args! {ARG_OWNER => account_user_1_key, ARG_AMOUNT => U256::from(TOKEN_OWNER_AMOUNT_1)},
     )
@@ -59,7 +57,7 @@ fn test_mint_and_burn_tokens() {
     builder.exec(mint_request).expect_success().commit();
     let mint_request_2 = ExecuteRequestBuilder::contract_call_by_hash(
         *DEFAULT_ACCOUNT_ADDR,
-        cep18_token,
+        cep18_token.into(),
         ENTRY_POINT_MINT,
         runtime_args! {ARG_OWNER => account_user_2_key, ARG_AMOUNT => U256::from(TOKEN_OWNER_AMOUNT_2)},
     )
@@ -85,7 +83,7 @@ fn test_mint_and_burn_tokens() {
 
     let mint_request = ExecuteRequestBuilder::contract_call_by_hash(
         *DEFAULT_ACCOUNT_ADDR,
-        cep18_token,
+        cep18_token.into(),
         ENTRY_POINT_MINT,
         runtime_args! {
             ARG_OWNER => account_user_1_key,
@@ -114,7 +112,7 @@ fn test_mint_and_burn_tokens() {
 
     let burn_request = ExecuteRequestBuilder::contract_call_by_hash(
         *DEFAULT_ACCOUNT_ADDR,
-        cep18_token,
+        cep18_token.into(),
         ENTRY_POINT_BURN,
         runtime_args! {
             ARG_OWNER => Key::Account(*DEFAULT_ACCOUNT_ADDR),
@@ -175,7 +173,7 @@ fn test_should_not_mint_above_limits() {
 
     let mint_request = ExecuteRequestBuilder::contract_call_by_hash(
         *DEFAULT_ACCOUNT_ADDR,
-        cep18_token,
+        cep18_token.into(),
         ENTRY_POINT_MINT,
         runtime_args! {ARG_OWNER => account_user_1_key, ARG_AMOUNT => U256::from(TOKEN_OWNER_AMOUNT_1)},
     )
@@ -183,7 +181,7 @@ fn test_should_not_mint_above_limits() {
     builder.exec(mint_request).expect_success().commit();
     let mint_request_2 = ExecuteRequestBuilder::contract_call_by_hash(
         *DEFAULT_ACCOUNT_ADDR,
-        cep18_token,
+        cep18_token.into(),
         ENTRY_POINT_MINT,
         runtime_args! {ARG_OWNER => account_user_2_key, ARG_AMOUNT => U256::from(TOKEN_OWNER_AMOUNT_2)},
     )
@@ -196,7 +194,7 @@ fn test_should_not_mint_above_limits() {
 
     let mint_request = ExecuteRequestBuilder::contract_call_by_hash(
         *DEFAULT_ACCOUNT_ADDR,
-        cep18_token,
+        cep18_token.into(),
         ENTRY_POINT_MINT,
         runtime_args! {
             ARG_OWNER => account_user_1_key,
@@ -230,7 +228,7 @@ fn test_should_not_burn_above_balance() {
 
     let burn_request = ExecuteRequestBuilder::contract_call_by_hash(
         *DEFAULT_ACCOUNT_ADDR,
-        cep18_token,
+        cep18_token.into(),
         ENTRY_POINT_BURN,
         runtime_args! {
             ARG_OWNER => Key::Account(*DEFAULT_ACCOUNT_ADDR),
@@ -276,7 +274,7 @@ fn test_should_not_mint_or_burn_with_entrypoint_disabled() {
 
     let mint_request = ExecuteRequestBuilder::contract_call_by_hash(
         *DEFAULT_ACCOUNT_ADDR,
-        cep18_token,
+        cep18_token.into(),
         ENTRY_POINT_MINT,
         runtime_args! {
             ARG_OWNER => account_user_1_key,
@@ -296,7 +294,7 @@ fn test_should_not_mint_or_burn_with_entrypoint_disabled() {
 
     let burn_request = ExecuteRequestBuilder::contract_call_by_hash(
         *DEFAULT_ACCOUNT_ADDR,
-        cep18_token,
+        cep18_token.into(),
         ENTRY_POINT_BURN,
         runtime_args! {
             ARG_OWNER => account_user_1_key,
@@ -341,7 +339,7 @@ fn test_security_no_rights() {
 
     let mint_request = ExecuteRequestBuilder::contract_call_by_hash(
         account_user_1,
-        cep18_token,
+        cep18_token.into(),
         ENTRY_POINT_MINT,
         runtime_args! {
             ARG_OWNER => Key::Account(account_user_1),
@@ -361,7 +359,7 @@ fn test_security_no_rights() {
 
     let passing_admin_mint_request = ExecuteRequestBuilder::contract_call_by_hash(
         *DEFAULT_ACCOUNT_ADDR,
-        cep18_token,
+        cep18_token.into(),
         ENTRY_POINT_MINT,
         runtime_args! {
             ARG_OWNER => Key::Account(account_user_1),
@@ -377,7 +375,7 @@ fn test_security_no_rights() {
 
     let burn_request = ExecuteRequestBuilder::contract_call_by_hash(
         account_user_1,
-        cep18_token,
+        cep18_token.into(),
         ENTRY_POINT_BURN,
         runtime_args! {
             ARG_OWNER => Key::Account(account_user_1),
@@ -425,7 +423,7 @@ fn test_security_minter_rights() {
 
     let mint_request = ExecuteRequestBuilder::contract_call_by_hash(
         account_user_1,
-        cep18_token,
+        cep18_token.into(),
         ENTRY_POINT_MINT,
         runtime_args! {
             ARG_OWNER => account_user_1_key,
@@ -464,7 +462,7 @@ fn test_security_burner_rights() {
 
     let mint_request = ExecuteRequestBuilder::contract_call_by_hash(
         account_user_1,
-        cep18_token,
+        cep18_token.into(),
         ENTRY_POINT_MINT,
         runtime_args! {
             ARG_OWNER => account_user_1_key,
@@ -485,7 +483,7 @@ fn test_security_burner_rights() {
     // mint by admin
     let working_mint_request = ExecuteRequestBuilder::contract_call_by_hash(
         *DEFAULT_ACCOUNT_ADDR,
-        cep18_token,
+        cep18_token.into(),
         ENTRY_POINT_MINT,
         runtime_args! {
             ARG_OWNER => Key::Account(*DEFAULT_ACCOUNT_ADDR),
@@ -499,7 +497,7 @@ fn test_security_burner_rights() {
     // any user can burn
     let burn_request = ExecuteRequestBuilder::contract_call_by_hash(
         *DEFAULT_ACCOUNT_ADDR,
-        cep18_token,
+        cep18_token.into(),
         ENTRY_POINT_BURN,
         runtime_args! {
             ARG_OWNER => Key::Account(*DEFAULT_ACCOUNT_ADDR),
@@ -539,7 +537,7 @@ fn test_change_security() {
 
     let change_security_request = ExecuteRequestBuilder::contract_call_by_hash(
         account_user_1,
-        cep18_token,
+        cep18_token.into(),
         ENTRY_POINT_CHANGE_SECURITY,
         runtime_args! {
             NONE_LIST => vec![Key::Account(*DEFAULT_ACCOUNT_ADDR)],
@@ -554,7 +552,7 @@ fn test_change_security() {
 
     let mint_request = ExecuteRequestBuilder::contract_call_by_hash(
         *DEFAULT_ACCOUNT_ADDR,
-        cep18_token,
+        cep18_token.into(),
         ENTRY_POINT_MINT,
         runtime_args! {
             ARG_OWNER => account_user_1_key,

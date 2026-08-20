@@ -8,6 +8,7 @@ pub const ARG_TOKEN_CONTRACT: &str = "token_contract";
 
 pub const ENTRY_POINT_APPROVE_AS_STORED_CONTRACT: &str = "approve_as_stored_contract";
 pub const ENTRY_POINT_CHECK_ALLOWANCE_OF: &str = "check_allowance_of";
+pub const ENTRY_POINT_CHECK_AUTHORIZATION_STATE: &str = "check_authorization_state";
 pub const ENTRY_POINT_CHECK_BALANCE_OF: &str = "check_balance_of";
 pub const ENTRY_POINT_CHECK_TOTAL_SUPPLY: &str = "check_total_supply";
 pub const ENTRY_POINT_SET_FILTER_CONTRACT_RETURN_VALUE: &str = "set_filter_contract_return_value";

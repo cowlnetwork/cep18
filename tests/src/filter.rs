@@ -1,9 +1,12 @@
 /* COWL */
 use casper_engine_test_support::{
-    ExecuteRequestBuilder, InMemoryWasmTestBuilder, DEFAULT_ACCOUNT_ADDR,
-    PRODUCTION_RUN_GENESIS_REQUEST,
+    ExecuteRequestBuilder, LmdbWasmTestBuilder, DEFAULT_ACCOUNT_ADDR, LOCAL_GENESIS_REQUEST,
 };
-use casper_types::{runtime_args, ContractHash, ContractPackageHash, Key, RuntimeArgs, U256};
+use casper_types::{
+    addressable_entity::EntityAddr,
+    contracts::{ContractHash, ContractPackageHash},
+    runtime_args, Key, U256,
+};
 use cep18_test_contract::constants::{
     ARG_FILTER_CONTRACT_RETURN_VALUE, ARG_TOKEN_CONTRACT, CEP18_TEST_CONTRACT_NAME,
     CEP18_TEST_CONTRACT_PACKAGE_NAME, ENTRY_POINT_SET_FILTER_CONTRACT_RETURN_VALUE,
@@ -27,15 +30,18 @@ use crate::utility::{
         TOKEN_TOTAL_SUPPLY,
     },
     installer_request_builders::{
-        cep18_check_balance_of, make_cep18_approve_request, setup, setup_with_args, TestContext,
+        cep18_check_balance_of, cep18_entity_addr, make_cep18_approve_request, setup,
+        setup_with_args, TestContext,
     },
     support::{assert_expected_error, create_funded_dummy_account, get_event},
 };
 
+type InMemoryWasmTestBuilder = LmdbWasmTestBuilder;
+
 #[test]
 fn check_transfers_with_transfer_filter_contract() {
     let mut builder = InMemoryWasmTestBuilder::default();
-    builder.run_genesis(&PRODUCTION_RUN_GENESIS_REQUEST);
+    builder.run_genesis((*LOCAL_GENESIS_REQUEST).clone());
 
     let account_user_1 = create_funded_dummy_account(&mut builder, Some(ACCOUNT_USER_1));
     let account_user_2 = create_funded_dummy_account(&mut builder, Some(ACCOUNT_USER_2));
@@ -63,14 +69,14 @@ fn check_transfers_with_transfer_filter_contract() {
     let transfer_filter_contract = account
         .named_keys()
         .get(CEP18_TEST_CONTRACT_NAME)
-        .and_then(|key| key.into_hash())
+        .and_then(|key| key.into_hash_addr())
         .map(ContractHash::new)
         .expect("should have contract hash");
 
     let transfer_filter_contract_package = account
         .named_keys()
         .get(CEP18_TEST_CONTRACT_PACKAGE_NAME)
-        .and_then(|key| key.into_hash())
+        .and_then(|key| key.into_hash_addr())
         .map(ContractPackageHash::new)
         .expect("should have contract package hash");
 
@@ -100,15 +106,21 @@ fn check_transfers_with_transfer_filter_contract() {
     let cep18_token = account
         .named_keys()
         .get(CEP18_TEST_TOKEN_CONTRACT_NAME)
-        .and_then(|key| key.into_hash())
+        .and_then(|key| key.into_hash_addr())
         .map(ContractHash::new)
         .expect("should have contract hash");
 
     let transfer_filter_contract_stored: ContractPackageHash = builder
-        .get_value::<Option<ContractPackageHash>>(cep18_token, ARG_TRANSFER_FILTER_CONTRACT_PACKAGE)
+        .get_value::<Option<ContractPackageHash>>(
+            EntityAddr::new_smart_contract(cep18_token.value()),
+            ARG_TRANSFER_FILTER_CONTRACT_PACKAGE,
+        )
         .unwrap();
     let transfer_filter_method_stored: String = builder
-        .get_value::<Option<String>>(cep18_token, ARG_TRANSFER_FILTER_METHOD)
+        .get_value::<Option<String>>(
+            EntityAddr::new_smart_contract(cep18_token.value()),
+            ARG_TRANSFER_FILTER_METHOD,
+        )
         .unwrap();
 
     assert_eq!(
@@ -124,7 +136,7 @@ fn check_transfers_with_transfer_filter_contract() {
     let set_token_contract_request_for_transfer_filter_contract =
         ExecuteRequestBuilder::contract_call_by_hash(
             *DEFAULT_ACCOUNT_ADDR,
-            transfer_filter_contract,
+            transfer_filter_contract.into(),
             ENTRY_POINT_INIT,
             runtime_args! {
                 ARG_TOKEN_CONTRACT => Key::from(cep18_token)
@@ -155,7 +167,7 @@ fn check_transfers_with_transfer_filter_contract() {
 
     let failing_transfer_call = ExecuteRequestBuilder::contract_call_by_hash(
         *DEFAULT_ACCOUNT_ADDR,
-        cep18_token,
+        cep18_token.into(),
         ENTRY_POINT_TRANSFER,
         cep18_transfer_args.clone(),
     )
@@ -188,7 +200,7 @@ fn check_transfers_with_transfer_filter_contract() {
     let transfer_filter_contract_set_return_value_request =
         ExecuteRequestBuilder::contract_call_by_hash(
             *DEFAULT_ACCOUNT_ADDR,
-            transfer_filter_contract,
+            transfer_filter_contract.into(),
             ENTRY_POINT_SET_FILTER_CONTRACT_RETURN_VALUE,
             runtime_args! {
                 ARG_FILTER_CONTRACT_RETURN_VALUE => TransferFilterContractResult::ProceedTransfer
@@ -203,7 +215,7 @@ fn check_transfers_with_transfer_filter_contract() {
 
     let transfer_call = ExecuteRequestBuilder::contract_call_by_hash(
         *DEFAULT_ACCOUNT_ADDR,
-        cep18_token,
+        cep18_token.into(),
         ENTRY_POINT_TRANSFER,
         cep18_transfer_args,
     )
@@ -228,7 +240,7 @@ fn check_transfers_with_transfer_filter_contract() {
     let transfer_filter_contract_set_return_value_request =
         ExecuteRequestBuilder::contract_call_by_hash(
             *DEFAULT_ACCOUNT_ADDR,
-            transfer_filter_contract,
+            transfer_filter_contract.into(),
             ENTRY_POINT_SET_FILTER_CONTRACT_RETURN_VALUE,
             runtime_args! {
                 ARG_FILTER_CONTRACT_RETURN_VALUE => TransferFilterContractResult::DenyTransfer
@@ -251,7 +263,7 @@ fn check_transfers_with_transfer_filter_contract() {
 
     let failing_transfer_call = ExecuteRequestBuilder::contract_call_by_hash(
         account_user_2,
-        cep18_token,
+        cep18_token.into(),
         ENTRY_POINT_TRANSFER_FROM,
         cep18_transfer_args.clone(),
     )
@@ -266,7 +278,7 @@ fn check_transfers_with_transfer_filter_contract() {
 
     let failing_transfer_call = ExecuteRequestBuilder::contract_call_by_hash(
         account_user_2,
-        cep18_token,
+        cep18_token.into(),
         ENTRY_POINT_TRANSFER_FROM,
         cep18_transfer_args.clone(),
     )
@@ -278,7 +290,7 @@ fn check_transfers_with_transfer_filter_contract() {
     let transfer_filter_contract_set_return_value_request =
         ExecuteRequestBuilder::contract_call_by_hash(
             *DEFAULT_ACCOUNT_ADDR,
-            transfer_filter_contract,
+            transfer_filter_contract.into(),
             ENTRY_POINT_SET_FILTER_CONTRACT_RETURN_VALUE,
             runtime_args! {
                 ARG_FILTER_CONTRACT_RETURN_VALUE => TransferFilterContractResult::ProceedTransfer
@@ -293,7 +305,7 @@ fn check_transfers_with_transfer_filter_contract() {
 
     let transfer_call = ExecuteRequestBuilder::contract_call_by_hash(
         account_user_2,
-        cep18_token,
+        cep18_token.into(),
         ENTRY_POINT_TRANSFER_FROM,
         cep18_transfer_args.clone(),
     )
@@ -305,7 +317,7 @@ fn check_transfers_with_transfer_filter_contract() {
 #[test]
 fn should_revert_with_invalid_filter_contract_method() {
     let mut builder = InMemoryWasmTestBuilder::default();
-    builder.run_genesis(&PRODUCTION_RUN_GENESIS_REQUEST);
+    builder.run_genesis((*LOCAL_GENESIS_REQUEST).clone());
 
     // Install filter contract first with empty TOKEN_CONTRACT value, we will update it after token
     // installation
@@ -330,7 +342,7 @@ fn should_revert_with_invalid_filter_contract_method() {
     let transfer_filter_contract_package = account
         .named_keys()
         .get(CEP18_TEST_CONTRACT_PACKAGE_NAME)
-        .and_then(|key| key.into_hash())
+        .and_then(|key| key.into_hash_addr())
         .map(ContractPackageHash::new)
         .expect("should have contract hash");
 
@@ -387,17 +399,17 @@ fn should_revert_with_invalid_filter_contract_method() {
 #[test]
 fn set_transfer_filter_contract_package_and_method() {
     let mut builder = InMemoryWasmTestBuilder::default();
-    builder.run_genesis(&PRODUCTION_RUN_GENESIS_REQUEST);
+    builder.run_genesis((*LOCAL_GENESIS_REQUEST).clone());
 
     let (mut builder, TestContext { cep18_token, .. }) = setup();
 
     let transfer_filter_contract_stored: Option<ContractPackageHash> =
         builder.get_value::<Option<ContractPackageHash>>(
-            cep18_token,
+            cep18_entity_addr(cep18_token),
             ARG_TRANSFER_FILTER_CONTRACT_PACKAGE,
         );
-    let transfer_filter_method_stored: Option<String> =
-        builder.get_value::<Option<String>>(cep18_token, ARG_TRANSFER_FILTER_METHOD);
+    let transfer_filter_method_stored: Option<String> = builder
+        .get_value::<Option<String>>(cep18_entity_addr(cep18_token), ARG_TRANSFER_FILTER_METHOD);
 
     assert_eq!(transfer_filter_contract_stored, None);
     assert_eq!(transfer_filter_method_stored, None);
@@ -411,7 +423,7 @@ fn set_transfer_filter_contract_package_and_method() {
 
     let set_transfer_filter_request = ExecuteRequestBuilder::contract_call_by_hash(
         *DEFAULT_ACCOUNT_ADDR,
-        cep18_token,
+        cep18_token.into(),
         ENTRY_POINT_SET_TRANSFER_FILTER,
         update_args,
     )
@@ -423,10 +435,13 @@ fn set_transfer_filter_contract_package_and_method() {
         .commit();
 
     let transfer_filter_contract_stored: ContractPackageHash = builder
-        .get_value::<Option<ContractPackageHash>>(cep18_token, ARG_TRANSFER_FILTER_CONTRACT_PACKAGE)
+        .get_value::<Option<ContractPackageHash>>(
+            cep18_entity_addr(cep18_token),
+            ARG_TRANSFER_FILTER_CONTRACT_PACKAGE,
+        )
         .unwrap();
     let transfer_filter_method_stored: String = builder
-        .get_value::<Option<String>>(cep18_token, ARG_TRANSFER_FILTER_METHOD)
+        .get_value::<Option<String>>(cep18_entity_addr(cep18_token), ARG_TRANSFER_FILTER_METHOD)
         .unwrap();
 
     assert_eq!(
@@ -443,7 +458,8 @@ fn set_transfer_filter_contract_package_and_method() {
         Some(ENTRY_POINT_TRANSFER_FILTER_METHOD.to_owned()),
     );
     let event_index = 1; // Mint + Set Filter
-    let actual_event: TransferFilterUpdate = get_event(&builder, &cep18_token.into(), event_index);
+    let actual_event: TransferFilterUpdate =
+        get_event(&builder, &Key::Hash(cep18_token.value()), event_index);
     assert_eq!(
         actual_event, expected_event,
         "Expected TransferFilterUpdate event."
@@ -453,7 +469,7 @@ fn set_transfer_filter_contract_package_and_method() {
 #[test]
 fn update_transfer_filter_contract_package_and_method() {
     let mut builder = InMemoryWasmTestBuilder::default();
-    builder.run_genesis(&PRODUCTION_RUN_GENESIS_REQUEST);
+    builder.run_genesis((*LOCAL_GENESIS_REQUEST).clone());
 
     let transfer_filter_contract_package = ContractPackageHash::from([1u8; 32]);
 
@@ -470,10 +486,13 @@ fn update_transfer_filter_contract_package_and_method() {
     let (mut builder, TestContext { cep18_token, .. }) = setup_with_args(install_args, None);
 
     let transfer_filter_contract_stored: ContractPackageHash = builder
-        .get_value::<Option<ContractPackageHash>>(cep18_token, ARG_TRANSFER_FILTER_CONTRACT_PACKAGE)
+        .get_value::<Option<ContractPackageHash>>(
+            cep18_entity_addr(cep18_token),
+            ARG_TRANSFER_FILTER_CONTRACT_PACKAGE,
+        )
         .unwrap();
     let transfer_filter_method_stored: String = builder
-        .get_value::<Option<String>>(cep18_token, ARG_TRANSFER_FILTER_METHOD)
+        .get_value::<Option<String>>(cep18_entity_addr(cep18_token), ARG_TRANSFER_FILTER_METHOD)
         .unwrap();
 
     assert_eq!(
@@ -494,7 +513,7 @@ fn update_transfer_filter_contract_package_and_method() {
 
     let set_transfer_filter_request = ExecuteRequestBuilder::contract_call_by_hash(
         *DEFAULT_ACCOUNT_ADDR,
-        cep18_token,
+        cep18_token.into(),
         ENTRY_POINT_SET_TRANSFER_FILTER,
         update_args,
     )
@@ -506,10 +525,13 @@ fn update_transfer_filter_contract_package_and_method() {
         .commit();
 
     let transfer_filter_contract_stored: ContractPackageHash = builder
-        .get_value::<Option<ContractPackageHash>>(cep18_token, ARG_TRANSFER_FILTER_CONTRACT_PACKAGE)
+        .get_value::<Option<ContractPackageHash>>(
+            cep18_entity_addr(cep18_token),
+            ARG_TRANSFER_FILTER_CONTRACT_PACKAGE,
+        )
         .unwrap();
     let transfer_filter_method_stored: String = builder
-        .get_value::<Option<String>>(cep18_token, ARG_TRANSFER_FILTER_METHOD)
+        .get_value::<Option<String>>(cep18_entity_addr(cep18_token), ARG_TRANSFER_FILTER_METHOD)
         .unwrap();
 
     assert_eq!(
@@ -522,7 +544,7 @@ fn update_transfer_filter_contract_package_and_method() {
 #[test]
 fn update_fail_transfer_filter_contract_package_without_args() {
     let mut builder = InMemoryWasmTestBuilder::default();
-    builder.run_genesis(&PRODUCTION_RUN_GENESIS_REQUEST);
+    builder.run_genesis((*LOCAL_GENESIS_REQUEST).clone());
 
     let transfer_filter_contract_package = ContractPackageHash::from([1u8; 32]);
 
@@ -539,10 +561,13 @@ fn update_fail_transfer_filter_contract_package_without_args() {
     let (mut builder, TestContext { cep18_token, .. }) = setup_with_args(install_args, None);
 
     let transfer_filter_contract_stored: ContractPackageHash = builder
-        .get_value::<Option<ContractPackageHash>>(cep18_token, ARG_TRANSFER_FILTER_CONTRACT_PACKAGE)
+        .get_value::<Option<ContractPackageHash>>(
+            cep18_entity_addr(cep18_token),
+            ARG_TRANSFER_FILTER_CONTRACT_PACKAGE,
+        )
         .unwrap();
     let transfer_filter_method_stored: String = builder
-        .get_value::<Option<String>>(cep18_token, ARG_TRANSFER_FILTER_METHOD)
+        .get_value::<Option<String>>(cep18_entity_addr(cep18_token), ARG_TRANSFER_FILTER_METHOD)
         .unwrap();
 
     assert_eq!(
@@ -562,7 +587,7 @@ fn update_fail_transfer_filter_contract_package_without_args() {
 
     let set_transfer_filter_request = ExecuteRequestBuilder::contract_call_by_hash(
         *DEFAULT_ACCOUNT_ADDR,
-        cep18_token,
+        cep18_token.into(),
         ENTRY_POINT_SET_TRANSFER_FILTER,
         update_args,
     )
@@ -576,7 +601,7 @@ fn update_fail_transfer_filter_contract_package_without_args() {
 
     let set_transfer_filter_request = ExecuteRequestBuilder::contract_call_by_hash(
         *DEFAULT_ACCOUNT_ADDR,
-        cep18_token,
+        cep18_token.into(),
         ENTRY_POINT_SET_TRANSFER_FILTER,
         update_args,
     )
@@ -588,7 +613,7 @@ fn update_fail_transfer_filter_contract_package_without_args() {
 #[test]
 fn disable_transfer_filter_contract_package() {
     let mut builder = InMemoryWasmTestBuilder::default();
-    builder.run_genesis(&PRODUCTION_RUN_GENESIS_REQUEST);
+    builder.run_genesis((*LOCAL_GENESIS_REQUEST).clone());
 
     let transfer_filter_contract_package = ContractPackageHash::from([1u8; 32]);
 
@@ -605,10 +630,13 @@ fn disable_transfer_filter_contract_package() {
     let (mut builder, TestContext { cep18_token, .. }) = setup_with_args(install_args, None);
 
     let transfer_filter_contract_stored: ContractPackageHash = builder
-        .get_value::<Option<ContractPackageHash>>(cep18_token, ARG_TRANSFER_FILTER_CONTRACT_PACKAGE)
+        .get_value::<Option<ContractPackageHash>>(
+            cep18_entity_addr(cep18_token),
+            ARG_TRANSFER_FILTER_CONTRACT_PACKAGE,
+        )
         .unwrap();
     let transfer_filter_method_stored: String = builder
-        .get_value::<Option<String>>(cep18_token, ARG_TRANSFER_FILTER_METHOD)
+        .get_value::<Option<String>>(cep18_entity_addr(cep18_token), ARG_TRANSFER_FILTER_METHOD)
         .unwrap();
 
     assert_eq!(
@@ -627,7 +655,7 @@ fn disable_transfer_filter_contract_package() {
 
     let set_transfer_filter_request = ExecuteRequestBuilder::contract_call_by_hash(
         *DEFAULT_ACCOUNT_ADDR,
-        cep18_token,
+        cep18_token.into(),
         ENTRY_POINT_SET_TRANSFER_FILTER,
         update_args,
     )
@@ -640,11 +668,11 @@ fn disable_transfer_filter_contract_package() {
 
     let transfer_filter_contract_stored: Option<ContractPackageHash> =
         builder.get_value::<Option<ContractPackageHash>>(
-            cep18_token,
+            cep18_entity_addr(cep18_token),
             ARG_TRANSFER_FILTER_CONTRACT_PACKAGE,
         );
-    let transfer_filter_method_stored: Option<String> =
-        builder.get_value::<Option<String>>(cep18_token, ARG_TRANSFER_FILTER_METHOD);
+    let transfer_filter_method_stored: Option<String> = builder
+        .get_value::<Option<String>>(cep18_entity_addr(cep18_token), ARG_TRANSFER_FILTER_METHOD);
 
     assert_eq!(transfer_filter_contract_stored, None);
     assert_eq!(transfer_filter_method_stored, None);
@@ -653,7 +681,7 @@ fn disable_transfer_filter_contract_package() {
 #[test]
 fn disable_method_of_transfer_filter_contract_package() {
     let mut builder = InMemoryWasmTestBuilder::default();
-    builder.run_genesis(&PRODUCTION_RUN_GENESIS_REQUEST);
+    builder.run_genesis((*LOCAL_GENESIS_REQUEST).clone());
 
     let transfer_filter_contract_package = ContractPackageHash::from([1u8; 32]);
 
@@ -670,10 +698,13 @@ fn disable_method_of_transfer_filter_contract_package() {
     let (mut builder, TestContext { cep18_token, .. }) = setup_with_args(install_args, None);
 
     let transfer_filter_contract_stored: ContractPackageHash = builder
-        .get_value::<Option<ContractPackageHash>>(cep18_token, ARG_TRANSFER_FILTER_CONTRACT_PACKAGE)
+        .get_value::<Option<ContractPackageHash>>(
+            cep18_entity_addr(cep18_token),
+            ARG_TRANSFER_FILTER_CONTRACT_PACKAGE,
+        )
         .unwrap();
     let transfer_filter_method_stored: String = builder
-        .get_value::<Option<String>>(cep18_token, ARG_TRANSFER_FILTER_METHOD)
+        .get_value::<Option<String>>(cep18_entity_addr(cep18_token), ARG_TRANSFER_FILTER_METHOD)
         .unwrap();
 
     assert_eq!(
@@ -694,7 +725,7 @@ fn disable_method_of_transfer_filter_contract_package() {
 
     let set_transfer_filter_request = ExecuteRequestBuilder::contract_call_by_hash(
         *DEFAULT_ACCOUNT_ADDR,
-        cep18_token,
+        cep18_token.into(),
         ENTRY_POINT_SET_TRANSFER_FILTER,
         update_args,
     )
@@ -706,10 +737,13 @@ fn disable_method_of_transfer_filter_contract_package() {
         .commit();
 
     let transfer_filter_contract_stored: ContractPackageHash = builder
-        .get_value::<Option<ContractPackageHash>>(cep18_token, ARG_TRANSFER_FILTER_CONTRACT_PACKAGE)
+        .get_value::<Option<ContractPackageHash>>(
+            cep18_entity_addr(cep18_token),
+            ARG_TRANSFER_FILTER_CONTRACT_PACKAGE,
+        )
         .unwrap();
-    let transfer_filter_method_stored: Option<String> =
-        builder.get_value::<Option<String>>(cep18_token, ARG_TRANSFER_FILTER_METHOD);
+    let transfer_filter_method_stored: Option<String> = builder
+        .get_value::<Option<String>>(cep18_entity_addr(cep18_token), ARG_TRANSFER_FILTER_METHOD);
 
     assert_eq!(
         transfer_filter_contract_stored,
@@ -721,7 +755,7 @@ fn disable_method_of_transfer_filter_contract_package() {
 #[test]
 fn disable_package_of_transfer_filter_contract_package() {
     let mut builder = InMemoryWasmTestBuilder::default();
-    builder.run_genesis(&PRODUCTION_RUN_GENESIS_REQUEST);
+    builder.run_genesis((*LOCAL_GENESIS_REQUEST).clone());
 
     let transfer_filter_contract_package = ContractPackageHash::from([1u8; 32]);
 
@@ -738,10 +772,13 @@ fn disable_package_of_transfer_filter_contract_package() {
     let (mut builder, TestContext { cep18_token, .. }) = setup_with_args(install_args, None);
 
     let transfer_filter_contract_stored: ContractPackageHash = builder
-        .get_value::<Option<ContractPackageHash>>(cep18_token, ARG_TRANSFER_FILTER_CONTRACT_PACKAGE)
+        .get_value::<Option<ContractPackageHash>>(
+            cep18_entity_addr(cep18_token),
+            ARG_TRANSFER_FILTER_CONTRACT_PACKAGE,
+        )
         .unwrap();
     let transfer_filter_method_stored: String = builder
-        .get_value::<Option<String>>(cep18_token, ARG_TRANSFER_FILTER_METHOD)
+        .get_value::<Option<String>>(cep18_entity_addr(cep18_token), ARG_TRANSFER_FILTER_METHOD)
         .unwrap();
 
     assert_eq!(
@@ -760,7 +797,7 @@ fn disable_package_of_transfer_filter_contract_package() {
 
     let set_transfer_filter_request = ExecuteRequestBuilder::contract_call_by_hash(
         *DEFAULT_ACCOUNT_ADDR,
-        cep18_token,
+        cep18_token.into(),
         ENTRY_POINT_SET_TRANSFER_FILTER,
         update_args,
     )
@@ -773,11 +810,11 @@ fn disable_package_of_transfer_filter_contract_package() {
 
     let transfer_filter_contract_stored: Option<ContractPackageHash> =
         builder.get_value::<Option<ContractPackageHash>>(
-            cep18_token,
+            cep18_entity_addr(cep18_token),
             ARG_TRANSFER_FILTER_CONTRACT_PACKAGE,
         );
     let transfer_filter_method_stored: String = builder
-        .get_value::<Option<String>>(cep18_token, ARG_TRANSFER_FILTER_METHOD)
+        .get_value::<Option<String>>(cep18_entity_addr(cep18_token), ARG_TRANSFER_FILTER_METHOD)
         .unwrap();
 
     assert_eq!(transfer_filter_contract_stored, None);
@@ -787,7 +824,7 @@ fn disable_package_of_transfer_filter_contract_package() {
 #[test]
 fn update_fail_transfer_filter_contract_package_with_package_and_empty_method() {
     let mut builder = InMemoryWasmTestBuilder::default();
-    builder.run_genesis(&PRODUCTION_RUN_GENESIS_REQUEST);
+    builder.run_genesis((*LOCAL_GENESIS_REQUEST).clone());
 
     let transfer_filter_contract_package = ContractPackageHash::from([1u8; 32]);
 
@@ -804,10 +841,13 @@ fn update_fail_transfer_filter_contract_package_with_package_and_empty_method() 
     let (mut builder, TestContext { cep18_token, .. }) = setup_with_args(install_args, None);
 
     let transfer_filter_contract_stored: ContractPackageHash = builder
-        .get_value::<Option<ContractPackageHash>>(cep18_token, ARG_TRANSFER_FILTER_CONTRACT_PACKAGE)
+        .get_value::<Option<ContractPackageHash>>(
+            cep18_entity_addr(cep18_token),
+            ARG_TRANSFER_FILTER_CONTRACT_PACKAGE,
+        )
         .unwrap();
     let transfer_filter_method_stored: String = builder
-        .get_value::<Option<String>>(cep18_token, ARG_TRANSFER_FILTER_METHOD)
+        .get_value::<Option<String>>(cep18_entity_addr(cep18_token), ARG_TRANSFER_FILTER_METHOD)
         .unwrap();
 
     assert_eq!(
@@ -828,7 +868,7 @@ fn update_fail_transfer_filter_contract_package_with_package_and_empty_method() 
 
     let set_transfer_filter_request = ExecuteRequestBuilder::contract_call_by_hash(
         *DEFAULT_ACCOUNT_ADDR,
-        cep18_token,
+        cep18_token.into(),
         ENTRY_POINT_SET_TRANSFER_FILTER,
         update_args,
     )

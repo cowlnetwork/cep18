@@ -24,8 +24,8 @@ use casper_contract::{
 };
 use casper_types::{
     bytesrepr::{Bytes, ToBytes},
-    contracts::NamedKeys,
-    runtime_args, CLValue, ContractHash, ContractPackageHash, Key, RuntimeArgs, U256,
+    contracts::{ContractHash, ContractPackageHash, NamedKeys},
+    runtime_args, CLValue, Key, RuntimeArgs, U256,
 };
 #[cfg(feature = "contract-support")]
 use cowl_cep18::{
@@ -39,11 +39,13 @@ use cowl_cep18::{
 };
 use cowl_cep18::{
     constants::{
-        ADMIN_LIST, ARG_ADDRESS, ARG_AMOUNT, ARG_DATA, ARG_DECIMALS, ARG_ENABLE_MINT_BURN,
-        ARG_EVENTS_MODE, ARG_FROM, ARG_INSTALLER, ARG_NAME, ARG_OPERATOR, ARG_OWNER,
-        ARG_PACKAGE_HASH, ARG_RECIPIENT, ARG_SPENDER, ARG_SYMBOL, ARG_TO, ARG_TOTAL_SUPPLY,
+        ADMIN_LIST, ARG_ADDRESS, ARG_AMOUNT, ARG_AUTHORIZER, ARG_CHAIN_NAME, ARG_DATA,
+        ARG_DEADLINE, ARG_DECIMALS, ARG_ENABLE_MINT_BURN, ARG_EVENTS_MODE, ARG_FROM, ARG_INSTALLER,
+        ARG_NAME, ARG_NONCE, ARG_OPERATOR, ARG_OWNER, ARG_PACKAGE_HASH, ARG_PUBLIC_KEY,
+        ARG_RECIPIENT, ARG_SIGNATURE, ARG_SPENDER, ARG_SYMBOL, ARG_TO, ARG_TOTAL_SUPPLY,
         ARG_TRANSFER_FILTER_CONTRACT_PACKAGE, ARG_TRANSFER_FILTER_METHOD, ARG_UPGRADE_FLAG,
-        DICT_ALLOWANCES, DICT_BALANCES, DICT_SECURITY_BADGES, ENTRY_POINT_INIT,
+        ARG_VALID_AFTER, ARG_VALID_BEFORE, ARG_VALUE, DICT_ALLOWANCES, DICT_BALANCES,
+        DICT_SECURITY_BADGES, DICT_USED_AUTHORIZATION_NONCES, ENTRY_POINT_INIT,
         ENTRY_POINT_UPGRADE, MINTER_LIST, NONE_LIST, PREFIX_ACCESS_KEY_NAME, PREFIX_CEP18,
         PREFIX_CONTRACT_NAME, PREFIX_CONTRACT_PACKAGE_NAME, PREFIX_CONTRACT_VERSION,
     },
@@ -54,6 +56,7 @@ use cowl_cep18::{
         IncreaseAllowance, Mint, SetAllowance, Transfer, TransferFilterUpdate, TransferFrom,
         Upgrade,
     },
+    gasless::{self, RECEIVE_WITH_AUTHORIZATION_TYPEHASH, TRANSFER_WITH_AUTHORIZATION_TYPEHASH},
     modalities::TransferFilterContractResult,
     security::{change_sec_badge, sec_check, SecurityBadge},
 };
@@ -212,6 +215,98 @@ pub extern "C" fn transfer_from() {
 }
 
 #[no_mangle]
+pub extern "C" fn authorization_state() {
+    let authorizer: Key = runtime::get_named_arg(ARG_AUTHORIZER);
+    let nonce: Bytes = runtime::get_named_arg(ARG_NONCE);
+    runtime::ret(
+        CLValue::from_t(gasless::authorization_state(authorizer, nonce)).unwrap_or_revert(),
+    );
+}
+
+#[no_mangle]
+pub extern "C" fn transfer_with_authorization() {
+    let from: Key = runtime::get_named_arg(ARG_FROM);
+    let to: Key = runtime::get_named_arg(ARG_TO);
+    let amount: U256 = runtime::get_named_arg(ARG_AMOUNT);
+    let valid_after: u64 = runtime::get_named_arg(ARG_VALID_AFTER);
+    let valid_before: u64 = runtime::get_named_arg(ARG_VALID_BEFORE);
+    let nonce: Bytes = runtime::get_named_arg(ARG_NONCE);
+    let public_key = runtime::get_named_arg(ARG_PUBLIC_KEY);
+    let signature: Bytes = runtime::get_named_arg(ARG_SIGNATURE);
+
+    gasless::consume_authorization(
+        TRANSFER_WITH_AUTHORIZATION_TYPEHASH,
+        from,
+        to,
+        amount,
+        valid_after,
+        valid_before,
+        nonce,
+        public_key,
+        signature,
+    );
+    before_token_transfer(&from, &from, &to, amount, None);
+    transfer_balance(from, to, amount).unwrap_or_revert();
+    record_event_dictionary(Event::Transfer(Transfer {
+        sender: from,
+        recipient: to,
+        amount,
+    }));
+}
+
+#[no_mangle]
+pub extern "C" fn receive_with_authorization() {
+    let from: Key = runtime::get_named_arg(ARG_FROM);
+    let to: Key = runtime::get_named_arg(ARG_TO);
+    if get_immediate_caller_address().unwrap_or_revert() != to {
+        revert(Cep18Error::InvalidAuthorizationCaller);
+    }
+    let amount: U256 = runtime::get_named_arg(ARG_AMOUNT);
+    let valid_after: u64 = runtime::get_named_arg(ARG_VALID_AFTER);
+    let valid_before: u64 = runtime::get_named_arg(ARG_VALID_BEFORE);
+    let nonce: Bytes = runtime::get_named_arg(ARG_NONCE);
+    let public_key = runtime::get_named_arg(ARG_PUBLIC_KEY);
+    let signature: Bytes = runtime::get_named_arg(ARG_SIGNATURE);
+
+    gasless::consume_authorization(
+        RECEIVE_WITH_AUTHORIZATION_TYPEHASH,
+        from,
+        to,
+        amount,
+        valid_after,
+        valid_before,
+        nonce,
+        public_key,
+        signature,
+    );
+    before_token_transfer(&to, &from, &to, amount, None);
+    transfer_balance(from, to, amount).unwrap_or_revert();
+    record_event_dictionary(Event::Transfer(Transfer {
+        sender: from,
+        recipient: to,
+        amount,
+    }));
+}
+
+#[no_mangle]
+pub extern "C" fn permit() {
+    let owner: Key = runtime::get_named_arg(ARG_OWNER);
+    let spender: Key = runtime::get_named_arg(ARG_SPENDER);
+    let value: U256 = runtime::get_named_arg(ARG_VALUE);
+    let deadline: u64 = runtime::get_named_arg(ARG_DEADLINE);
+    let public_key = runtime::get_named_arg(ARG_PUBLIC_KEY);
+    let signature: Bytes = runtime::get_named_arg(ARG_SIGNATURE);
+
+    gasless::verify_permit(owner, spender, value, deadline, public_key, signature);
+    write_allowance_to(get_allowances_uref(), owner, spender, value);
+    record_event_dictionary(Event::SetAllowance(SetAllowance {
+        owner,
+        spender,
+        allowance: value,
+    }));
+}
+
+#[no_mangle]
 pub extern "C" fn mint() {
     if 0 == get_stored_value::<u8>(ARG_ENABLE_MINT_BURN) {
         revert(Cep18Error::MintBurnDisabled);
@@ -290,6 +385,9 @@ pub extern "C" fn init() {
     let package_hash = get_named_arg::<Key>(ARG_PACKAGE_HASH);
     put_key(ARG_PACKAGE_HASH, package_hash);
     storage::new_dictionary(DICT_ALLOWANCES).unwrap_or_revert();
+    let chain_name = get_optional_named_arg_with_user_errors(ARG_CHAIN_NAME, Cep18Error::Phantom)
+        .unwrap_or_else(|| String::from("casper:casper"));
+    gasless::init(chain_name);
     let balances_uref = storage::new_dictionary(DICT_BALANCES).unwrap_or_revert();
     let initial_supply = runtime::get_named_arg(ARG_TOTAL_SUPPLY);
     let caller = get_caller();
@@ -342,9 +440,9 @@ pub extern "C" fn init() {
 
     let transfer_filter_contract_package_hash: Option<ContractPackageHash> =
         transfer_filter_contract_package_key.map(|transfer_filter_contract_package_key| {
-            ContractPackageHash::from(
+            ContractPackageHash::new(
                 transfer_filter_contract_package_key
-                    .into_hash()
+                    .into_hash_addr()
                     .unwrap_or_revert(),
             )
         });
@@ -419,23 +517,29 @@ pub extern "C" fn change_security() {
 pub fn upgrade_contract(name: &str) {
     let entry_points = generate_entry_points();
 
-    let contract_package_hash = runtime::get_key(&format!(
+    let contract_package_hash = match runtime::get_key(&format!(
         "{PREFIX_CEP18}_{PREFIX_CONTRACT_PACKAGE_NAME}_{name}"
     ))
     .unwrap_or_revert()
-    .into_hash()
-    .map(ContractPackageHash::new)
-    .unwrap_or_revert_with(Cep18Error::MissingPackageHashForUpgrade);
+    {
+        Key::Hash(hash) => ContractPackageHash::new(hash),
+        _ => runtime::revert(Cep18Error::MissingPackageHashForUpgrade),
+    };
 
     let previous_contract_hash =
-        runtime::get_key(&format!("{PREFIX_CEP18}_{PREFIX_CONTRACT_NAME}_{name}"))
+        match runtime::get_key(&format!("{PREFIX_CEP18}_{PREFIX_CONTRACT_NAME}_{name}"))
             .unwrap_or_revert()
-            .into_hash()
-            .map(ContractHash::new)
-            .unwrap_or_revert_with(Cep18Error::MissingPackageHashForUpgrade);
+        {
+            Key::Hash(hash) => ContractHash::new(hash),
+            _ => runtime::revert(Cep18Error::MissingPackageHashForUpgrade),
+        };
 
-    let (contract_hash, contract_version) =
-        storage::add_contract_version(contract_package_hash, entry_points, NamedKeys::new());
+    let (contract_hash, contract_version) = storage::add_contract_version(
+        contract_package_hash,
+        entry_points,
+        NamedKeys::new(),
+        BTreeMap::new(),
+    );
 
     storage::disable_contract_version(contract_package_hash, previous_contract_hash)
         .unwrap_or_revert();
@@ -455,6 +559,9 @@ pub fn upgrade_contract(name: &str) {
 /* COWL */
 #[no_mangle]
 pub extern "C" fn upgrade() {
+    if get_key(DICT_USED_AUTHORIZATION_NONCES).is_none() {
+        gasless::init(String::from("casper:casper"));
+    }
     record_event_dictionary(Event::Upgrade(Upgrade {}));
 }
 /*  */
@@ -463,6 +570,9 @@ pub fn install_contract(name: &str) {
     let symbol: String = runtime::get_named_arg(ARG_SYMBOL);
     let decimals: u8 = runtime::get_named_arg(ARG_DECIMALS);
     let total_supply: U256 = runtime::get_named_arg(ARG_TOTAL_SUPPLY);
+    let chain_name: String =
+        get_optional_named_arg_with_user_errors(ARG_CHAIN_NAME, Cep18Error::Phantom)
+            .unwrap_or_else(|| String::from("casper:casper"));
     let events_mode: u8 =
         get_optional_named_arg_with_user_errors(ARG_EVENTS_MODE, Cep18Error::InvalidEventsMode)
             .unwrap_or(0u8);
@@ -503,6 +613,7 @@ pub fn install_contract(name: &str) {
         Some(named_keys),
         Some(package_hash_name.clone()),
         Some(format!("{PREFIX_CEP18}_{PREFIX_ACCESS_KEY_NAME}_{name}")),
+        None,
     );
     let package_hash = runtime::get_key(&package_hash_name).unwrap_or_revert();
 
@@ -537,6 +648,7 @@ pub fn install_contract(name: &str) {
     let mut init_args = runtime_args! {
         ARG_TOTAL_SUPPLY => total_supply,
         ARG_PACKAGE_HASH => package_hash,
+        ARG_CHAIN_NAME => chain_name,
         /* COWL */
         ARG_TRANSFER_FILTER_CONTRACT_PACKAGE => transfer_filter_contract_package_key,
         ARG_TRANSFER_FILTER_METHOD => transfer_filter_method,
@@ -618,7 +730,7 @@ pub extern "C" fn set_transfer_filter() {
         maybe_transfer_filter_contract_package_key.map(|transfer_filter_contract_package_key| {
             ContractPackageHash::from(
                 transfer_filter_contract_package_key
-                    .into_hash()
+                    .into_package_hash()
                     .unwrap_or_revert(),
             )
         });

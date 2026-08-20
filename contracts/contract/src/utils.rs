@@ -16,10 +16,12 @@ use casper_contract::{
     unwrap_or_revert::UnwrapOrRevert,
 };
 use casper_types::{
+    account::AccountHash,
     api_error,
     bytesrepr::{self, FromBytes, ToBytes},
-    system::CallStackElement,
-    ApiError, CLTyped, ContractPackageHash, Key, URef, U256,
+    contracts::ContractPackageHash,
+    system::CallerInfo,
+    ApiError, CLTyped, Key, URef, U256,
 };
 use core::{convert::TryInto, mem::MaybeUninit};
 
@@ -39,22 +41,22 @@ where
     value
 }
 
-/// Returns address based on a [`CallStackElement`].
-///
-/// For `Session` and `StoredSession` variants it will return account hash, and for `StoredContract`
-/// case it will use contract package hash as the address.
-fn call_stack_element_to_address(call_stack_element: CallStackElement) -> Key {
-    match call_stack_element {
-        CallStackElement::Session { account_hash } => Key::from(account_hash),
-        CallStackElement::StoredSession { account_hash, .. } => {
-            // Stored session code acts in account's context, so if stored session wants to interact
-            // with an CEP-18 token caller's address will be used.
-            Key::from(account_hash)
-        }
-        CallStackElement::StoredContract {
-            contract_package_hash,
-            ..
-        } => Key::from(contract_package_hash),
+/// Returns the address represented by a call-stack element.
+fn call_stack_element_to_address(caller_info: CallerInfo) -> Key {
+    match caller_info.kind() {
+        0 => caller_info
+            .get_field_by_index(0)
+            .and_then(|value| value.clone().into_t::<Option<AccountHash>>().ok())
+            .flatten()
+            .map(Key::from)
+            .unwrap_or_revert(),
+        4 => caller_info
+            .get_field_by_index(2)
+            .and_then(|value| value.clone().into_t::<Option<ContractPackageHash>>().ok())
+            .flatten()
+            .map(Key::from)
+            .unwrap_or_revert(),
+        _ => revert(Cep18Error::InvalidContext),
     }
 }
 

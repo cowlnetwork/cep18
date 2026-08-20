@@ -59,6 +59,17 @@ pub enum Cep18Error {
     InvalidData = 50006,
     InvalidAmount = 50007,
     UnexpectedKeyVariant = 50008,
+    InvalidAuthorizationNonce = 50009,
+    AuthorizationAlreadyUsed = 50010,
+    AuthorizationNotYetValid = 50011,
+    AuthorizationExpired = 50012,
+    InvalidAuthorizationPublicKey = 50013,
+    InvalidAuthorizationSignature = 50014,
+    InvalidAuthorizationCaller = 50015,
+    PermitExpired = 50016,
+    InvalidPermitPublicKey = 50017,
+    InvalidPermitSignature = 50018,
+    PermitNonceOverflow = 50019,
     /*  */
 }
 
